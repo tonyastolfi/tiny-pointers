@@ -34,6 +34,10 @@ class TinyPointersRecipe(ConanFile):
         OVERRIDE = self.cor.OVERRIDE
 
         self.requires("boost/[>=1.84.0]", **VISIBLE)
+        self.requires("batteries/[>=0.58.6]", **VISIBLE)
+        self.requires("pcg-cpp/[>=cci.20220409]", **VISIBLE)
+        self.requires("xxhash/[>=0.8.2]", **VISIBLE)
+        self.requires("bitmagic/[>=7.13.4]", **VISIBLE)
         self.test_requires("gtest/[>=1.14.0]")
 
     def configure(self):
