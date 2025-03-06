@@ -10,6 +10,7 @@ target_link_libraries(
   PUBLIC boost::boost
   PUBLIC batteries::batteries
   PUBLIC bitmagic::bitmagic
+  PUBLIC xxHash::xxhash
   #
   # Add other library -> library dependencies here.
   #
