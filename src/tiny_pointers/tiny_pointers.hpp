@@ -2,6 +2,7 @@
 
 #include "bit_vec.hpp"
 #include "imports.hpp"
+#include "util.hpp"
 
 #include <batteries/strong_typedef.hpp>
 
@@ -189,11 +190,25 @@ class SimpleDereferenceTable : public DereferenceTable
         }
     }
 
+    /** \brief Returns the maximum fraction of storage slots available for allocation.
+     */
+    double load_factor() const noexcept
+    {
+        return 1.0 - this->delta_;
+    }
+
+    /** \brief The number of slots in the storage array; not all are available for allocation (see capacity).
+     */
+    usize n_slots() const noexcept
+    {
+        return this->n_slots_;
+    }
+
     /** \brief The maximum number of active allocations (w.h.p.).
      */
     usize capacity() const noexcept
     {
-        return (1.0 - this->delta_) * this->n_slots_;
+        return this->load_factor() * this->n_slots_;
     }
 
     /** \brief The current number of active allocations.
@@ -203,64 +218,126 @@ class SimpleDereferenceTable : public DereferenceTable
         return this->size_;
     }
 
+    //==#==========+==+=+=++=+++++++++++-+-+--+----- --- -- -  -  -   -
+    //
     StatusOr<TinyPointer> Allocate(Key x) noexcept override
     {
-        const u64 x_hash = this->hash_fn_(x);
-        const u64 x_bucket_i =
-            ((x_hash >> (this->log_n_ + 1)) * this->bucket_count_ + 1) >> (63 - this->log_n_);
+        // Find the bucket for x.
+        //
+        const usize bucket_i = this->find_bucket(x);
 
-        BATT_CHECK_LT(x_bucket_i, this->bucket_count_);
+        // Look at the first free slot for the bucket.
+        //
+        TinyPointer free_slot = this->get_free_head(bucket_i);
+        if (free_slot.int_value() == this->slots_per_bucket_) {
+            return {batt::StatusCode::kResourceExhausted};
+        }
 
-        return {batt::StatusCode::kUnimplemented};
+        // There is a free slot; set the head of the free list to the next
+        // free slot and give the first one to the caller.
+        //
+        TinyPointer next_free = this->get_free_next(bucket_i, free_slot.int_value());
+        this->set_free_head(bucket_i, next_free);
+
+        // Success!
+        //
+        ++this->size_;
+        return free_slot;
     }
 
+    //==#==========+==+=+=++=+++++++++++-+-+--+----- --- -- -  -  -   -
+    //
     SlotIndex Dereference(Key x, TinyPointer p) noexcept override
     {
-        return SlotIndex{0};
+        // Find the bucket for x.
+        //
+        const usize bucket_i = this->find_bucket(x);
+        const usize slot_i = p.int_value();
+
+        return SlotIndex{bucket_i * this->slots_per_bucket_ + slot_i};
     }
 
+    //==#==========+==+=+=++=+++++++++++-+-+--+----- --- -- -  -  -   -
+    //
     void Free(Key x, TinyPointer p) noexcept override
     {
+        // Find the bucket for x.
+        //
+        const usize bucket_i = this->find_bucket(x);
+
+        // Slot `p` will be the new head; set it's next to the current head.
+        //
+        this->set_free_next(bucket_i, p.int_value(), this->get_free_head(bucket_i));
+
+        // Push `p` onto the free list.
+        //
+        this->set_free_head(bucket_i, p);
+
+        // Success!
+        //
+        --this->size_;
     }
 
+    //==#==========+==+=+=++=+++++++++++-+-+--+----- --- -- -  -  -   -
+    //
     void Set(SlotIndex i, Value v) noexcept override
     {
+        BATT_CHECK_EQ(v.size(), this->q_bits_per_slot_);
+
+        const usize pos = i * this->q_bits_per_slot_;
+
+        this->storage_.set_range(pos, v);
     }
 
+    //==#==========+==+=+=++=+++++++++++-+-+--+----- --- -- -  -  -   -
+    //
     Value Get(SlotIndex i) noexcept override
     {
-        return Value{};
+        const usize pos = i * this->q_bits_per_slot_;
+
+        return this->storage_.get_range(pos, pos + this->q_bits_per_slot_);
     }
 
     //+++++++++++-+-+--+----- --- -- -  -  -   -
    private:
-    void set_free_next(usize bucket_i, usize slot_i, const BitVec& value) noexcept
+    usize find_bucket(const Key& x) const noexcept
+    {
+        const u64 bucket_i = scale_u64(this->hash_fn_(x), this->bucket_count_);
+        BATT_CHECK_LT(bucket_i, this->bucket_count_);
+
+        return bucket_i;
+    }
+
+    void set_free_next(usize bucket_i, usize slot_i, const TinyPointer& value) noexcept
     {
         BATT_CHECK_EQ(value.size(), this->p_bits_);
 
-        usize pos = (bucket_i * this->slots_per_bucket_ + slot_i) * this->q_bits_per_slot_;
+        const usize pos = (bucket_i * this->slots_per_bucket_ + slot_i) * this->q_bits_per_slot_;
 
         this->storage_.set_range(pos, value);
     }
 
-    BitVec get_free_next(usize bucket_i, usize slot_i) const noexcept
+    TinyPointer get_free_next(usize bucket_i, usize slot_i) const noexcept
     {
-        usize pos = (bucket_i * this->slots_per_bucket_ + slot_i) * this->q_bits_per_slot_;
+        const usize pos = (bucket_i * this->slots_per_bucket_ + slot_i) * this->q_bits_per_slot_;
 
         return this->storage_.get_range(pos, pos + this->p_bits_);
     }
 
-    void set_free_head(usize bucket_i, const BitVec& value) noexcept
+    void set_free_head(usize bucket_i, const TinyPointer& value) noexcept
     {
         BATT_CHECK_EQ(value.size(), this->p_bits_);
 
-        this->free_list_head_.set_range(this->p_bits_ * bucket_i, value);
+        const usize pos = bucket_i * this->p_bits_;
+
+        this->free_list_head_.set_range(pos, value);
     }
 
-    BitVec get_free_head(usize bucket_i) const noexcept
+    TinyPointer get_free_head(usize bucket_i) const noexcept
     {
-        return this->free_list_head_.get_range(this->p_bits_ * bucket_i,  //
-                                               this->p_bits_ * (bucket_i + 1));
+        const usize pos = bucket_i * this->p_bits_;
+
+        return this->free_list_head_.get_range(pos, pos + this->p_bits_);
     }
 
     //+++++++++++-+-+--+----- --- -- -  -  -   -
@@ -287,7 +364,13 @@ class SimpleDereferenceTable : public DereferenceTable
     // q - the value size
     //
     const BitsPerSlot q_bits_per_slot_;
+
+    // 1 - load_factor
+    //
     const Delta delta_;
+
+    // The number of active allocations.
+    //
     usize size_;
     HashFn hash_fn_;
     BitVec storage_;
