@@ -13,6 +13,7 @@ inline u64 bit_rank(u64 bit_set, u64 index) noexcept
     return __builtin_popcountll(bit_set & ((u64{1} << index) - 1));
 }
 
+// clang-format off
 /** \brief Returns the position of the `rank`-th 1-bit within `bitset`.
  *
  * Example:
@@ -52,6 +53,7 @@ inline u64 bit_rank(u64 bit_set, u64 index) noexcept
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~│~~~~~~~~~~~~~~~~~
  *                                               │ (63 - 47) = 16 =  (select result)
  */
+// clang-format on    
 inline u64 bit_select(u64 bit_set, u64 rank) noexcept
 {
     return 63 - __builtin_clzll(_pdep_u64((u64{2} << rank) - 1, bit_set));

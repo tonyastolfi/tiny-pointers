@@ -3,7 +3,7 @@ BasedOnStyle: Google
 Language: Cpp
 Standard: "c++20"
 
-ColumnLimit: 90
+ColumnLimit: 80
 
 AlignEscapedNewlines: Right
 AllowAllArgumentsOnNextLine: false

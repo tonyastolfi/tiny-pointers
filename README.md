@@ -98,26 +98,30 @@ class DereferenceTable
     //+++++++++++-+-+--+----- --- -- -  -  -   -
     // From the paper:
 
-    /** \brief Creates a new dereference table, and returns a pointer to an array with `n` slots, each of size
-     * `q` bits. We call this array the store. The dereference table will be capable of supporting up to (1 −
-     * d n concurrent allocations at at time. We require that d = O(1/q).
+    /** \brief Creates a new dereference table, and returns a pointer to an
+     * array with `n` slots, each of size `q` bits. We call this array the
+     * store. The dereference table will be capable of supporting up to (1 − d n
+     * concurrent allocations at at time. We require that d = O(1/q).
      */
     using CreateFn = StatusOr<Ptr>(SlotCount n, BitsPerSlot q, Delta d);
 
-    /** \brief Given a key `x`, allocates a slot in the store to `x`, and returns a bit string `p`, which we
-     * call a tiny pointer.
+    /** \brief Given a key `x`, allocates a slot in the store to `x`, and
+     * returns a bit string `p`, which we call a tiny pointer.
      */
     virtual StatusOr<TinyPointer> Allocate(Key x) noexcept = 0;
 
-    /** \brief Given a key `x` and a tiny pointer `p`, the procedure returns the index of the slot allocated
-     * to `x` in the store. If `p` is not a valid tiny pointer for `x` (i.e., `p` was not returned by a call
-     * to Allocate(`x`)), then the procedure may return an arbitrary index in the store.
+    /** \brief Given a key `x` and a tiny pointer `p`, the procedure returns the
+     * index of the slot allocated to `x` in the store. If `p` is not a valid
+     * tiny pointer for `x` (i.e., `p` was not returned by a call to
+     * Allocate(`x`)), then the procedure may return an arbitrary index in the
+     * store.
      */
     virtual SlotIndex Dereference(Key x, TinyPointer p) noexcept = 0;
 
-    /** \brief Given a key `x` and a tiny pointer `p`, the procedure deallocates slot Dereference(`x`, `p`)
-     * from `x`. The user is only permitted to call this function on pairs (`x`, `p`) where `p` is a valid
-     * tiny pointer for `x` (i.e., `p` was returned by the most recent call to Allocate(`x`)).
+    /** \brief Given a key `x` and a tiny pointer `p`, the procedure deallocates
+     * slot Dereference(`x`, `p`) from `x`. The user is only permitted to call
+     * this function on pairs (`x`, `p`) where `p` is a valid tiny pointer for
+     * `x` (i.e., `p` was returned by the most recent call to Allocate(`x`)).
      */
     virtual void Free(Key x, TinyPointer p) noexcept = 0;
 
@@ -140,8 +144,36 @@ class DereferenceTable
 };
 ```
 
+## Simple Deference Table (SDT)
 
-## Test Output
+- bucket size = `log^4(n)`
+- load factor = `1 - 1/log(n)`
+- tiny pointer size = `O(log(log(n)))` (actually `~ceil(4 * log(log(n)))`)
+
+## Load Balancing Table (LBT)
+
+- bucket size = `δ^−2 * log(δ^−1)`
+- if `δ = 1 / log(log(n))`, then bucket size = `log(log(log(n))) / (log(log(n)) * log(log(n)))`
+- tiny pointer size = `O(log(log(log(n))))` (!!)
+- problem: high failure rate (no more w.h.p.)
+
+## Power-of-Two-Choices Table (P2T)
+
+- bucket size = `log(n)`
+- tiny pointer size = `1 + log(n)`
+- insert/allocate algorithm: hash to two locations, pick the least loaded one
+- this gives much better failure rate, at a cost of much lower load factor
+
+## Final Construction (fixed-size Tiny Pointers)
+
+- Create both an LBT and a P2T
+- First try inserting to LBT; that will fail at rate of `1/δ`; use P2T on failure
+- This finally achieves;
+  - `O(log(log(log(n))))` tiny pointer size
+  - allocations succeed w.h.p.
+  - good load factor (`1 - 1/log(log(n))`)
+
+## Example
 
 ```
 [==========] Running 5 tests from 4 test suites.
@@ -185,4 +217,61 @@ Connection to localhost closed.
 [==========] 5 tests from 4 test suites ran. (22312 ms total)
 [  PASSED  ] 5 tests.
 
+```
+
+## Some other concepts mentioned
+
+### Using bit-wise instructions to implement fast rank/select (for free lists)
+
+```c++
+/** \brief Returns the number of 1's in `bit_set` at or before position `index`.
+ */
+inline u64 bit_rank(u64 bit_set, u64 index) noexcept
+{
+    return __builtin_popcountll(bit_set & ((u64{1} << index) - 1));
+}
+
+/** \brief Returns the position of the `rank`-th 1-bit within `bitset`.
+ *
+ * Example:
+ *
+ * bit_set =
+ * 0000000000000000000000000000010101101110010010111000110001111001
+ *
+ * rank = 8
+ * mask = (2 << 8) - 1 =
+ * 0000000000000000000000000000000000000000000000000000000111111111
+ *                              ┌───────────────┘│││││││││┃┃┃┃┃┃┃┃┃
+ *                              │ ┌──────────────┘││││││││┃┃┃┃┃┃┃┃┃
+ *                              │ │ ┌─────────────┘│││││││┃┃┃┃┃┃┃┃┃
+ *                              │ │ │┌─────────────┘││││││┃┃┃┃┃┃┃┃┃
+ *                              │ │ ││ ┌────────────┘│││││┃┃┃┃┃┃┃┃┃
+ *                              │ │ ││ │┌────────────┘││││┃┃┃┃┃┃┃┃┃
+ *                              │ │ ││ ││┌────────────┘│││┃┃┃┃┃┃┃┃┃
+ *                              │ │ ││ │││  ┌──────────┘││┃┃┃┃┃┃┃┃┃
+ *                              │ │ ││ │││  │  ┌────────┘│┃┃┃┃┃┃┃┃┃
+ *                              │ │ ││ │││  │  │ ┌───────┘┃┃┃┃┃┃┃┃┃
+ *                              │ │ ││ │││  │  │ │┏━━━━━━━┛┃┃┃┃┃┃┃┃
+ *                              │ │ ││ │││  │  │ │┃┏━━━━━━━┛┃┃┃┃┃┃┃
+ *                              │ │ ││ │││  │  │ │┃┃   ┏━━━━┛┃┃┃┃┃┃
+ *                              │ │ ││ │││  │  │ │┃┃   ┃┏━━━━┛┃┃┃┃┃
+ *                              │ │ ││ │││  │  │ │┃┃   ┃┃   ┏━┛┃┃┃┃
+ *                              │ │ ││ │││  │  │ │┃┃   ┃┃   ┃┏━┛┃┃┃
+ *                              │ │ ││ │││  │  │ │┃┃   ┃┃   ┃┃┏━┛┃┃
+ *                              │ │ ││ │││  │  │ │┃┃   ┃┃   ┃┃┃┏━┛┃
+ *                              ▽ ▽ ▽▽ ▽▽▽  ▽  ▽ ▽▼▼   ▼▼   ▼▼▼▼  ▼
+ *                         (..0010101101110010010111000110001111001) (bit_set)
+ * 0000000000000000000000000000000000000000000000011000110001111001  (PDEP result)
+ * |◀───────────────────────────────────────────▶│
+ * CLZ = 47                                      │
+ * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~│~~~~~~~~~~~~~~~~~
+ * 6666555555555544444444443333333333222222222211111111110000000000  (bit index 10's)
+ * 3210987654321098765432109876543210987654321098765432109876543210  (bit index 1's)
+ * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~│~~~~~~~~~~~~~~~~~
+ *                                               │ (63 - 47) = 16 =  (select result)
+ */
+inline u64 bit_select(u64 bit_set, u64 rank) noexcept
+{
+    return 63 - __builtin_clzll(_pdep_u64((u64{2} << rank) - 1, bit_set));
+}
 ```

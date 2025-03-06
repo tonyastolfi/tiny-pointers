@@ -18,12 +18,13 @@ namespace tiny_pointers {
 
 //=#=#==#==#===============+=+=+=+=++=++++++++++++++-++-+--+-+----+---------------
 
-/** \brief A key is anything that can be hashed.  We will represent this as a byte string.
+/** \brief A key is anything that can be hashed.  We will represent this as a
+ * byte string.
  */
 using Key = std::string_view;
 
-/** \brief Dereference tables store values of `q` bits in size; represent values as bit
- * vectors.
+/** \brief Dereference tables store values of `q` bits in size; represent values
+ * as bit vectors.
  */
 using Value = BitVec;
 
@@ -59,7 +60,8 @@ inline Delta load_factor(Delta delta) noexcept
 
 //=#=#==#==#===============+=+=+=+=++=++++++++++++++-++-+--+-+----+---------------
 
-/** \brief Define a family of seed-able hash functions for the various constructions.
+/** \brief Define a family of seed-able hash functions for the various
+ * constructions.
  */
 struct HashFn {
     u64 seed_;
@@ -94,29 +96,30 @@ class DereferenceTable
     //+++++++++++-+-+--+----- --- -- -  -  -   -
     // From the paper:
 
-    /** \brief Creates a new dereference table, and returns a pointer to an array with `n`
-     * slots, each of size `q` bits. We call this array the store. The dereference table
-     * will be capable of supporting up to (1 − d n concurrent allocations at at time. We
-     * require that d = O(1/q).
+    /** \brief Creates a new dereference table, and returns a pointer to an
+     * array with `n` slots, each of size `q` bits. We call this array the
+     * store. The dereference table will be capable of supporting up to (1 − d n
+     * concurrent allocations at at time. We require that d = O(1/q).
      */
     using CreateFn = StatusOr<Ptr>(SlotCount n, BitsPerSlot q, Delta d);
 
-    /** \brief Given a key `x`, allocates a slot in the store to `x`, and returns a bit
-     * string `p`, which we call a tiny pointer.
+    /** \brief Given a key `x`, allocates a slot in the store to `x`, and
+     * returns a bit string `p`, which we call a tiny pointer.
      */
     virtual StatusOr<TinyPointer> Allocate(Key x) noexcept = 0;
 
-    /** \brief Given a key `x` and a tiny pointer `p`, the procedure returns the index of
-     * the slot allocated to `x` in the store. If `p` is not a valid tiny pointer for `x`
-     * (i.e., `p` was not returned by a call to Allocate(`x`)), then the procedure may
-     * return an arbitrary index in the store.
+    /** \brief Given a key `x` and a tiny pointer `p`, the procedure returns the
+     * index of the slot allocated to `x` in the store. If `p` is not a valid
+     * tiny pointer for `x` (i.e., `p` was not returned by a call to
+     * Allocate(`x`)), then the procedure may return an arbitrary index in the
+     * store.
      */
     virtual SlotIndex Dereference(Key x, TinyPointer p) noexcept = 0;
 
-    /** \brief Given a key `x` and a tiny pointer `p`, the procedure deallocates slot
-     * Dereference(`x`, `p`) from `x`. The user is only permitted to call this function on
-     * pairs (`x`, `p`) where `p` is a valid tiny pointer for `x` (i.e., `p` was returned
-     * by the most recent call to Allocate(`x`)).
+    /** \brief Given a key `x` and a tiny pointer `p`, the procedure deallocates
+     * slot Dereference(`x`, `p`) from `x`. The user is only permitted to call
+     * this function on pairs (`x`, `p`) where `p` is a valid tiny pointer for
+     * `x` (i.e., `p` was returned by the most recent call to Allocate(`x`)).
      */
     virtual void Free(Key x, TinyPointer p) noexcept = 0;
 
@@ -142,8 +145,8 @@ class DereferenceTable
 
 /** \brief From Section 3, Warmup:
  *
- * Let `q` ≥ log `n` and `d` = 1/log `n`. There is a dereference table for `q`-bit values
- * that:
+ * Let `q` ≥ log `n` and `d` = 1/log `n`. There is a dereference table for
+ * `q`-bit values that:
  *
  *  1. succeeds on each allocation w.h.p.
  *  2. has load factor 1 − `d`
@@ -155,15 +158,18 @@ class SimpleDereferenceTable : public DereferenceTable
    public:
     SimpleDereferenceTable(SlotCount n, BitsPerSlot q) noexcept
 
-        // We partition the store into n/b buckets, each of which has b = log^4(n) slots.
+        // We partition the store into n/b buckets, each of which has b =
+        // log^4(n) slots.
         //
-        : slots_per_bucket_{log2_ceil(n) * log2_ceil(n) * log2_ceil(n) * log2_ceil(n)}
-        , bucket_count_{(n + this->slots_per_bucket_ - 1) / this->slots_per_bucket_}
+        : slots_per_bucket_{log2_ceil(n) * log2_ceil(n) * log2_ceil(n) *
+                            log2_ceil(n)}
+        , bucket_count_{(n + this->slots_per_bucket_ - 1) /
+                        this->slots_per_bucket_}
         , n_slots_{this->slots_per_bucket_ * this->bucket_count_}
         , log_n_{log2_ceil(this->n_slots_)}
 
-        // If the key (x) is allocated the p-th slot in the bucket, then the number p is
-        // returned as the tiny pointer for x
+        // If the key (x) is allocated the p-th slot in the bucket, then the
+        // number p is returned as the tiny pointer for x
         //
         , p_bits_{log2_ceil(this->slots_per_bucket_)}
 
@@ -186,24 +192,27 @@ class SimpleDereferenceTable : public DereferenceTable
         BATT_CHECK_GE(this->n_slots_, n);
         BATT_CHECK_GE(this->q_bits_per_slot_, this->log_n_);
 
-        // Initialize free lists; free heads should all be zero, so they are good.
+        // Initialize free lists; free heads should all be zero, so they are
+        // good.
         //
         for (usize bucket_i = 0; bucket_i < this->bucket_count_; ++bucket_i) {
             for (usize slot_i = 0; slot_i < this->slots_per_bucket_; ++slot_i) {
-                this->set_free_next(bucket_i, slot_i, BitVec{this->p_bits_, slot_i + 1});
+                this->set_free_next(bucket_i, slot_i,
+                                    BitVec{this->p_bits_, slot_i + 1});
             }
         }
     }
 
-    /** \brief Returns the maximum fraction of storage slots available for allocation.
+    /** \brief Returns the maximum fraction of storage slots available for
+     * allocation.
      */
     double load_factor() const noexcept
     {
         return 1.0 - this->delta_;
     }
 
-    /** \brief The number of slots in the storage array; not all are available for
-     * allocation (see capacity).
+    /** \brief The number of slots in the storage array; not all are available
+     * for allocation (see capacity).
      */
     usize n_slots() const noexcept
     {
@@ -265,10 +274,12 @@ class SimpleDereferenceTable : public DereferenceTable
         // There is a free slot; set the head of the free list to the next
         // free slot and give the first one to the caller.
         //
-        TinyPointer next_free = this->get_free_next(bucket_i, free_slot.int_value());
+        TinyPointer next_free =
+            this->get_free_next(bucket_i, free_slot.int_value());
         this->set_free_head(bucket_i, next_free);
 
-        BATT_CHECK_EQ(this->get_free_head(bucket_i).int_value(), next_free.int_value());
+        BATT_CHECK_EQ(this->get_free_head(bucket_i).int_value(),
+                      next_free.int_value());
 
         // Success!
         //
@@ -302,7 +313,8 @@ class SimpleDereferenceTable : public DereferenceTable
 
         // Slot `p` will be the new head; set it's next to the current head.
         //
-        this->set_free_next(bucket_i, p.int_value(), this->get_free_head(bucket_i));
+        this->set_free_next(bucket_i, p.int_value(),
+                            this->get_free_head(bucket_i));
 
         // Push `p` onto the free list.
         //
@@ -343,20 +355,21 @@ class SimpleDereferenceTable : public DereferenceTable
         return bucket_i;
     }
 
-    void set_free_next(usize bucket_i, usize slot_i, const TinyPointer& value) noexcept
+    void set_free_next(usize bucket_i, usize slot_i,
+                       const TinyPointer& value) noexcept
     {
         BATT_CHECK_EQ(value.size(), this->p_bits_);
 
-        const usize pos =
-            (bucket_i * this->slots_per_bucket_ + slot_i) * this->q_bits_per_slot_;
+        const usize pos = (bucket_i * this->slots_per_bucket_ + slot_i) *
+                          this->q_bits_per_slot_;
 
         this->storage_.set_range(pos, value);
     }
 
     TinyPointer get_free_next(usize bucket_i, usize slot_i) const noexcept
     {
-        const usize pos =
-            (bucket_i * this->slots_per_bucket_ + slot_i) * this->q_bits_per_slot_;
+        const usize pos = (bucket_i * this->slots_per_bucket_ + slot_i) *
+                          this->q_bits_per_slot_;
 
         return this->storage_.get_range(pos, pos + this->p_bits_);
     }
