@@ -2,6 +2,14 @@
 
 This repo contains a partial implementation of the ideas from: [Tiny Pointers](https://dl.acm.org/doi/10.1145/3700594) (_Michael A. Bender, Alex Conway, Martín Farach-Colton, William Kuszmaul, and Guido Tagliavini. 2024. ACM Trans. Algorithms Just Accepted (October 2024)_).
 
+Also inspired:
+
+[Optimal Bounds for Open Addressing Without Reordering](https://arxiv.org/abs/2501.02305)
+
+[Undergraduate Upends a 40-Year-Old Data Science Conjecture](https://www.quantamagazine.org/undergraduate-upends-a-40-year-old-data-science-conjecture-20250210/)
+
+[Lightning Talk](https://youtu.be/ArQNyOU1hyE?si=yIC2NhfSiBWTXlJH)
+
 ## Motivation
 
 Pointers can represent a lot of overhead:
