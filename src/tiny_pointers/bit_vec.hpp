@@ -16,6 +16,7 @@ inline void bit_copy(const u64* p_src, usize src_shift,  //
         const usize bits = std::min(n_to_copy, 64 - std::max(src_shift, dst_shift));
         const u64 mask = (u64{1} << bits) - 1;
 
+        *p_dst &= ~(mask << dst_shift);
         *p_dst |= ((*p_src >> src_shift) & mask) << dst_shift;
 
         src_shift += bits;
@@ -44,6 +45,10 @@ class BitVec
     {
     }
 
+    explicit BitVec(i32 n) noexcept : BitVec{BATT_CHECKED_CAST(usize, n)}
+    {
+    }
+
     BitVec(usize n, u64 data) noexcept : bit_size_{n}, words_((n + 63) / 64)
     {
         BATT_CHECK_LE(n, 64);
@@ -51,9 +56,30 @@ class BitVec
             this->words_[0] = data & ((u64{1} << n) - 1);
         }
     }
-
     BitVec(i32 n, u64 data) noexcept : BitVec{BATT_CHECKED_CAST(usize, n), data}
     {
+    }
+
+    BitVec(usize n, std::string_view s) noexcept : BitVec{n}
+    {
+        *this = s;
+    }
+
+    BitVec(i32 n, std::string_view s) noexcept : BitVec{BATT_CHECKED_CAST(usize, n), s}
+    {
+    }
+
+    explicit BitVec(std::string_view s) noexcept : BitVec{s.size() * 8, s}
+    {
+    }
+
+    //+++++++++++-+-+--+----- --- -- -  -  -   -
+
+    Self& operator=(std::string_view s) noexcept
+    {
+        const usize n_to_copy = std::min(s.size(), this->words_.size() * sizeof(u64));
+        std::memcpy(this->words_.data(), s.data(), n_to_copy);
+        return *this;
     }
 
     bool operator[](usize i) const noexcept
@@ -101,6 +127,11 @@ class BitVec
     u64 int_value() const noexcept
     {
         return this->words_[0] & ((u64{1} << this->size()) - 1);
+    }
+
+    std::string_view as_str() const noexcept
+    {
+        return std::string_view{(const char*)this->words_.data(), this->bit_size_ / 8};
     }
 
    private:

@@ -218,6 +218,28 @@ class SimpleDereferenceTable : public DereferenceTable
         return this->size_;
     }
 
+    /** \brief The size of TinyPointers returned by this.
+     */
+    usize tiny_pointer_size() const noexcept
+    {
+        return this->p_bits_;
+    }
+
+    usize slots_per_bucket() const noexcept
+    {
+        return this->slots_per_bucket_;
+    }
+
+    usize log_n() const noexcept
+    {
+        return this->log_n_;
+    }
+
+    usize bucket_count() const noexcept
+    {
+        return this->bucket_count_;
+    }
+
     //==#==========+==+=+=++=+++++++++++-+-+--+----- --- -- -  -  -   -
     //
     StatusOr<TinyPointer> Allocate(Key x) noexcept override
@@ -232,12 +254,15 @@ class SimpleDereferenceTable : public DereferenceTable
         if (free_slot.int_value() == this->slots_per_bucket_) {
             return {batt::StatusCode::kResourceExhausted};
         }
+        BATT_CHECK_LT(free_slot.int_value(), this->slots_per_bucket_);
 
         // There is a free slot; set the head of the free list to the next
         // free slot and give the first one to the caller.
         //
         TinyPointer next_free = this->get_free_next(bucket_i, free_slot.int_value());
         this->set_free_head(bucket_i, next_free);
+
+        BATT_CHECK_EQ(this->get_free_head(bucket_i).int_value(), next_free.int_value());
 
         // Success!
         //
@@ -249,6 +274,8 @@ class SimpleDereferenceTable : public DereferenceTable
     //
     SlotIndex Dereference(Key x, TinyPointer p) noexcept override
     {
+        BATT_CHECK_EQ(p.size(), this->p_bits_);
+
         // Find the bucket for x.
         //
         const usize bucket_i = this->find_bucket(x);
@@ -261,6 +288,8 @@ class SimpleDereferenceTable : public DereferenceTable
     //
     void Free(Key x, TinyPointer p) noexcept override
     {
+        BATT_CHECK_EQ(p.size(), this->p_bits_);
+
         // Find the bucket for x.
         //
         const usize bucket_i = this->find_bucket(x);
@@ -282,7 +311,7 @@ class SimpleDereferenceTable : public DereferenceTable
     //
     void Set(SlotIndex i, Value v) noexcept override
     {
-        BATT_CHECK_EQ(v.size(), this->q_bits_per_slot_);
+        BATT_CHECK_LE(v.size(), this->q_bits_per_slot_);
 
         const usize pos = i * this->q_bits_per_slot_;
 

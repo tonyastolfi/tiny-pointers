@@ -58,6 +58,13 @@ TEST(BitVecTest, Test)
     for (usize i = 0; i < 128; ++i) {
         EXPECT_EQ(z.get_range(i * 7, (i + 1) * 7).int_value(), i);
     }
+    for (usize i = 0; i < 128; ++i) {
+        BitVec e{7, 127 - i};
+        z.set_range(i * 7, e);
+    }
+    for (usize i = 0; i < 128; ++i) {
+        EXPECT_EQ(z.get_range(i * 7, (i + 1) * 7).int_value(), 127 - i);
+    }
 }
 
 }  //namespace
