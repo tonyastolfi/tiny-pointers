@@ -291,6 +291,7 @@ inline u64 bit_select(u64 bit_set, u64 rank) noexcept
 - Linux
 - Python 3.10 (or newer)
 - Pip
+- CMake 
 
 ## Tools Setup
 

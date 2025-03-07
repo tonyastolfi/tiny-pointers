@@ -2,7 +2,8 @@
 
 FROM registry.gitlab.com/batteriesincluded/batt-docker/batteries-debian12-build-tools:0.4.0
 
-RUN apt-get update && apt-get remove --purge -y cmake
+# TODO [tastolfi 2025-03-07] make this work (requires batteries fix)
+# RUN apt-get update && apt-get remove --purge -y cmake
 
 RUN mkdir -p /build
 COPY . /build
@@ -16,6 +17,10 @@ RUN . /tools-env/bin/activate && \
     cor setup-conan && \
     echo "" >> ~/.conan2/profiles/default && \
     echo "[tool_requires]" >> ~/.conan2/profiles/default && \
-    echo "cmake/3.31.6" >> ~/.conan2/profiles/default && \
+    echo "gflags/*:cmake/3.31.6" >> ~/.conan2/profiles/default && \
+    echo "protobuf/*:cmake/3.31.6" >> ~/.conan2/profiles/default && \
+    echo "xxhash/*:cmake/3.31.6" >> ~/.conan2/profiles/default && \
     cat ~/.conan2/profiles/default && \
     cor test --clean
+
+#    echo "batteries/*:cmake/3.31.6" >> ~/.conan2/profiles/default && \
