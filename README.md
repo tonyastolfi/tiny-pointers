@@ -283,3 +283,51 @@ inline u64 bit_select(u64 bit_set, u64 rank) noexcept
     return 63 - __builtin_clzll(_pdep_u64((u64{2} << rank) - 1, bit_set));
 }
 ```
+
+## How to Build/Run
+
+## Prerequisites
+
+- Linux
+- Python 3.10 (or newer)
+- Pip
+
+## Tools Setup
+
+### Install Pipx
+
+```shell
+pip install --upgrade pipx
+```
+
+### Install batt-cli
+
+For more info, see: [https://gitlab.com/batteriesincluded/batt-cli](https://gitlab.com/batteriesincluded/batt-cli).
+
+```
+pip install batt-cli --index-url https://gitlab.com/api/v4/projects/64628567/packages/pypi/simple
+cor-setup
+cor setup-conan
+```
+
+## Build
+
+In project dir:
+
+```shell
+cor build
+```
+
+## Run Tests
+
+In project dir:
+
+```shell
+cor test --only
+```
+
+## Build and Run Tests (single-step alternative method)
+
+```shell
+cor test
+```

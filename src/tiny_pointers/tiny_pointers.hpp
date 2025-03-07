@@ -346,7 +346,8 @@ class SimpleDereferenceTable : public DereferenceTable
     }
 
     //+++++++++++-+-+--+----- --- -- -  -  -   -
-   private:
+    // public for TESTING ONLY!
+    //
     usize find_bucket(const Key& x) const noexcept
     {
         const u64 bucket_i = scale_u64(this->hash_fn_(x), this->bucket_count_);
@@ -389,7 +390,10 @@ class SimpleDereferenceTable : public DereferenceTable
 
         return this->free_list_head_.get_range(pos, pos + this->p_bits_);
     }
+    //
+    //+++++++++++-+-+--+----- --- -- -  -  -   -
 
+   private:
     //+++++++++++-+-+--+----- --- -- -  -  -   -
     // b - the bucket size
     //
